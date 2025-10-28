@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+
+# Ignore environment variables and API keys (CRITICAL SECURITY STEP)
+.env
+
+# Ignore Streamlit's local cache
+.streamlit/

@@ -41,7 +41,31 @@ class DesignOutput(BaseModel):
 
 # --- 2. Data Loading ---
 
-
+def load_knowledge_base() -> pd.DataFrame:
+    """
+    Loads the design component knowledge base from CSV.
+    Returns an empty DataFrame if the file doesn't exist or has errors.
+    """
+    kb_path = os.path.join(os.path.dirname(__file__), 'design_db.csv')
+    
+    try:
+        if not os.path.exists(kb_path):
+            print(f"Warning: Knowledge base file not found at {kb_path}")
+            return pd.DataFrame()
+        
+        df = pd.read_csv(kb_path)
+        
+        # Validate required columns
+        required_cols = ['ID', 'Feature', 'Keywords', 'Tone', 'HTML_Snippet']
+        if not all(col in df.columns for col in required_cols):
+            print(f"Error: CSV missing required columns. Expected: {required_cols}")
+            return pd.DataFrame()
+        
+        return df
+    
+    except Exception as e:
+        print(f"Error loading knowledge base: {e}")
+        return pd.DataFrame()
 
 # --- 3. Retrieval (The 'R' in RAG - Check B.2: Fuzzy Match) ---
 

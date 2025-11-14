@@ -1,4 +1,4 @@
-name: WDIO Test Playground
+name: AI Site Generator Workflow
 
 # This section defines what triggers the workflow to run
 on:

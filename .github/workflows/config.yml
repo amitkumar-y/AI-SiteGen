@@ -1,0 +1,47 @@
+name: WDIO Test Playground
+
+# This section defines what triggers the workflow to run
+on:
+  # Run when code is pushed to the 'main' branch
+  push:
+    branches: [ "main" ]
+  # Run when a pull request is created that targets the 'main' branch
+  pull_request:
+    branches: [ "main" ]
+# A workflow is made up of one or more "jobs"
+jobs:
+  # We'll define a single job named 'run-e2e-tests'
+  run-e2e-tests:
+    # The job will run on a virtual machine with the latest Ubuntu OS
+    runs-on: ubuntu-latest
+
+    # 'steps' are the sequence of tasks the job will execute
+    steps:
+      # Step 1: Checks out your repository code onto the runner
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Step 2: Sets up the Node.js environment on the runner
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # Use a recent stable version of Node.js
+
+      # Step 3: Installs project dependencies securely and quickly
+      - name: Install Dependencies
+        run: npm ci
+
+      # Step 4: Runs the WebdriverIO tests (the same command you use locally)
+      - name: Run WebdriverIO Tests
+        run: npx wdio run ./wdio.conf.js
+
+      # Step 5: Uploads the test report
+      # This saves the 'allure-results' folder as a downloadable file,
+      # called an "artifact". The 'if: always()' condition ensures this
+      # step runs even if the tests fail, so you always get a report.
+      - name: Upload Allure Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: allure-results

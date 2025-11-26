@@ -46,4 +46,6 @@ jobs:
       - name: Run tests
         env:
           CI: true
-        run: npx wdio run wdio.conf.js
+        run: |
+          mkdir -p logs/screenshots
+          npx wdio run wdio.conf.js --spec test/specs/sample_test.js

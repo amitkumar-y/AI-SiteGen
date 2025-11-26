@@ -9,6 +9,8 @@ describe('Wikipedia Page Visit', () => {
 
   it('should have the Wikipedia logo text', async () => {
     const logoText = await $('.central-textlogo-wrapper').getText();
+    console.log('Logo text found:', JSON.stringify(logoText));
+    console.log('Logo text length:', logoText.length);
     expect(logoText).toContain('Wikipedia');
   })
 })

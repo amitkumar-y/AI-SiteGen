@@ -1,11 +1,13 @@
 // basic-wdio.conf.js
+const path = require('path');
+const fs = require('fs');
+
 exports.config = {
-  // Test files location
   // Test files location
   specs: [
     process.env.CI
-      ? './test/specs/sample_test.js'  // Only run this in CI
-      : './test/specs/**/*.js'         // Run all tests locally
+      ? './test/specs/sample_test.js'
+      : './test/specs/**/*.js'
   ],
   // Test runner configuration
   runner: 'local',
@@ -20,7 +22,8 @@ exports.config = {
         '--disable-dev-shm-usage',
         '--disable-gpu',
         '--window-size=1920,1080',
-        '--start-maximized'
+        '--start-maximized',
+        ...(process.env.CI ? ['--headless'] : [])  // ADD HEADLESS ONLY IN CI
       ]
     }
   }],
@@ -34,8 +37,6 @@ exports.config = {
 
   // Reporters configuration
   reporters: ['spec'],
-
-  // Services
   services: ['chromedriver'],
 
   // WebdriverIO configuration
@@ -47,16 +48,13 @@ exports.config = {
 
   // Hooks
   before: function () {
-    const fs = require('fs');
-    const path = require('path');
-
     // Create logs directory if it doesn't exist
-    if (!fs.existsSync(this.outputDir)) {
-      fs.mkdirSync(this.outputDir, { recursive: true });
+    if (!fs.existsSync('./logs')) {
+      fs.mkdirSync('./logs', { recursive: true });
     }
 
     // Create error screenshots directory inside logs
-    const errorScreenshotsDir = path.join(this.outputDir, 'screenshots');
+    const errorScreenshotsDir = path.join('./logs', 'screenshots');
     if (!fs.existsSync(errorScreenshotsDir)) {
       fs.mkdirSync(errorScreenshotsDir, { recursive: true });
     }
@@ -65,7 +63,7 @@ exports.config = {
   afterTest: async function (test, context, { error }) {
     if (error) {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const screenshotPath = path.join(this.outputDir, 'screenshots', `error-${timestamp}.png`);
+      const screenshotPath = path.join('./logs', 'screenshots', `error-${timestamp}.png`);
 
       try {
         await browser.saveScreenshot(screenshotPath);

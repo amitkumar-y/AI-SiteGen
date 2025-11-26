@@ -1,8 +1,21 @@
+# Python
 __pycache__/
 *.pyc
 
-# Ignore environment variables and API keys (CRITICAL SECURITY STEP)
+# Node.js
+node_modules/
+npm-debug.log*
+
+# Environment variables
 .env
 
-# Ignore Streamlit's local cache
+# Streamlit
 .streamlit/
+
+# Logs
+logs/
+*.log
+
+# Screenshots (if any)
+errorScreenshots/
+screenshots/

@@ -11,7 +11,7 @@ Key Functions:
 - load_knowledge_base(): Loads and validates the component database
 """
 
-import pandas as pd  # Fixed typo: changed 'panda' to 'pandas'
+import pandas as pd
 import os
 
 

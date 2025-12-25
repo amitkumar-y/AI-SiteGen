@@ -6,24 +6,19 @@ This file orchestrates the RAG pipeline using separate modules for loading and r
 import os
 import json
 from typing import List, Optional, Dict, Any
-from groq import Groq
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from data_loader import load_knowledge_base
 from retriever import ComponentRetriever
 from safety_filters import SafetyFilter
 from conversation_manager import ConversationChain
+from model_manager import get_model_manager
 
 # --- Initialization & Security ---
 load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-if not GROQ_API_KEY:
-    raise ValueError("GROQ_API_KEY not found. Please check your .env file.")
-
-# Groq Client Initialization
-client = Groq()
-MODEL_NAME = "llama-3.1-8b-instant"
+# Model Manager Initialization (handles multiple LLMs with automatic fallback)
+model_manager = get_model_manager()
 
 # Safety Filter Initialization
 safety_filter = SafetyFilter()
@@ -129,8 +124,7 @@ Return ONLY valid JSON in this format:
 }}
 """
 
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
+        response = model_manager.chat_completion(
             messages=[
                 {
                     "role": "system",
@@ -224,9 +218,8 @@ Return ONLY valid JSON with this exact structure:
 }}
 """
 
-        # Call Groq API
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
+        # Call LLM API with automatic model fallback
+        response = model_manager.chat_completion(
             messages=[
                 {
                     "role": "system",

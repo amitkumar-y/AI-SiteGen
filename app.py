@@ -6,6 +6,7 @@ This file is the user interface, linking the user to the RAG engine.
 import streamlit as st
 from rag_engine import run_rag_pipeline, UNMATCHED_PROMPT_MESSAGE
 from conversation_manager import create_conversation_chain
+from model_manager import get_model_manager
 
 # --- Page Configuration ---
 st.set_page_config(page_title="AI Law Firm Site Generator", layout="wide")
@@ -372,6 +373,20 @@ with st.sidebar:
                 """, unsafe_allow_html=True)
     else:
         st.info("No prompts yet")
+
+    st.markdown("---")
+
+    # Model info
+    st.markdown("### 🤖 AI Model")
+    model_manager = get_model_manager()
+    model_info = model_manager.get_model_info()
+    stats = model_manager.get_stats()
+
+    st.markdown(f"""
+    **Current:** {model_info['name']}
+    **Available:** {stats['active_models']} models
+    **Auto-switch:** Enabled
+    """)
 
     st.markdown("---")
 

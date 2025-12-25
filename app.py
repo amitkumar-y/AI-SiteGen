@@ -5,11 +5,12 @@ This file is the user interface, linking the user to the RAG engine.
 
 import streamlit as st
 from rag_engine import run_rag_pipeline, UNMATCHED_PROMPT_MESSAGE
+from conversation_manager import create_conversation_chain
 
 # --- Page Configuration ---
 st.set_page_config(page_title="AI Law Firm Site Generator", layout="wide")
 
-# Custom CSS for better styling
+# Custom CSS for better styling with chat interface
 st.markdown(
     """
     <style>
@@ -17,7 +18,6 @@ st.markdown(
         background-color: #f8f9fa;
     }
     .stButton>button {
-        width: 100%;
         background-color: #2563eb;
         color: white;
         font-weight: 600;
@@ -30,13 +30,6 @@ st.markdown(
         background-color: #1d4ed8;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
-    .proposal-card {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 0.75rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        margin-bottom: 1.5rem;
-    }
     .metric-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
@@ -44,216 +37,350 @@ st.markdown(
         border-radius: 0.5rem;
         text-align: center;
     }
+    /* Fix input at bottom */
+    .fixed-bottom {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        padding: 1rem;
+        border-top: 1px solid #e5e7eb;
+        z-index: 1000;
+    }
     </style>
 """,
     unsafe_allow_html=True,
 )
-
-st.title("⚖️ AI Law Firm Site Designer")
-st.markdown("### Transform your vision into professional law firm websites")
-st.caption(
-    "Describe the type of law practice and design style you want, and we'll generate 3 unique website proposals with live previews."
-)
-st.markdown("---")
 
 # --- Session State Initialization ---
 if "prompt_history" not in st.session_state:
     st.session_state.prompt_history = []
 if "rag_result" not in st.session_state:
     st.session_state.rag_result = None
+if "conversation_chain" not in st.session_state:
+    st.session_state.conversation_chain = create_conversation_chain()
+if "conversation_mode" not in st.session_state:
+    st.session_state.conversation_mode = True  # Enable by default
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []  # Store chat messages for display
+if "input_key" not in st.session_state:
+    st.session_state.input_key = 0  # Key to force input field reset
 
-# --- User Input ---
-col1, col2 = st.columns([3, 1])
-with col1:
-    user_prompt = st.text_input(
-        "Describe the desired website:",
-        placeholder="e.g., Aggressive site for criminal defense with quick contact form.",
-        key="user_prompt",
-        label_visibility="collapsed",
+# --- Header ---
+st.title("⚖️ AI Law Firm Site Designer")
+st.markdown("### Transform your vision into professional law firm websites")
+
+# --- Conversation Mode Toggle ---
+col_mode, col_clear, col_help = st.columns([3, 1, 1])
+with col_mode:
+    st.session_state.conversation_mode = st.checkbox(
+        "💬 Conversation Mode",
+        value=st.session_state.conversation_mode,
+        help="Enable follow-up questions that reference previous designs"
     )
-with col2:
-    generate_button = st.button(
-        "🚀 Generate Design", type="primary", disabled=not user_prompt
-    )
+with col_clear:
+    if st.button("🔄 Clear Chat"):
+        st.session_state.conversation_chain.clear()
+        st.session_state.rag_result = None
+        st.session_state.chat_history = []
+        st.session_state.prompt_history = []
+        st.success("✅ Chat cleared!")
+        st.rerun()
+with col_help:
+    with st.popover("💡 Help"):
+        st.markdown("""
+        **Example prompts:**
+        - "Modern aggressive site for criminal defense"
+        - "Traditional estate planning website"
+        - "Professional corporate law firm"
+        """)
 
-with st.expander("💡 Need inspiration? See example prompts", expanded=False):
-    st.markdown("""
-    **Good examples:**
-    - "Modern and aggressive site for criminal defense attorney"
-    - "Traditional estate planning website with trustworthy design"
-    - "Professional corporate law firm with clean, minimalist design"
-    - "Conservative family law practice with warm, approachable tone"
-    - "Fast-response immigration law site with multilingual support feel"
-    
-    **What to include:**
-    - ✅ Type of law practice (criminal, estate, corporate, family, immigration, etc.)
-    - ✅ Design tone (modern, traditional, aggressive, conservative, professional)
-    - ✅ Target audience or special features
-    
-    **Won't work:**
-    - ❌ General questions like "What is law?"
-    - ❌ Non-legal businesses (restaurants, retail, etc.)
-    - ❌ Unrelated topics
-    """)
+st.markdown("---")
 
-# --- Generate Button ---
-if generate_button:
-    with st.spinner("🔍 Validating your request..."):
-        # Store prompt first
-        st.session_state.prompt_history.append(user_prompt)
+# --- Display Chat History ---
+if st.session_state.conversation_mode and st.session_state.chat_history:
+    st.markdown("### 💬 Conversation")
 
-        # Run the pipeline
-        st.session_state.rag_result = run_rag_pipeline(user_prompt)
+    # Chat messages container (scrollable)
+    chat_container = st.container()
 
-        # Show success message if we got proposals
-        if st.session_state.rag_result and "proposals" in st.session_state.rag_result:
-            st.success("✅ Validation passed! Generating designs...")
+    with chat_container:
+        # Display all messages
+        for idx, msg in enumerate(st.session_state.chat_history):
+            if msg["role"] == "user":
+                # User message (right-aligned)
+                st.markdown(f"""
+                    <div style="display: flex; justify-content: flex-end; margin-bottom: 1.5rem;">
+                        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                    color: white; padding: 1rem 1.5rem; border-radius: 1rem 1rem 0 1rem;
+                                    max-width: 70%; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <div style="font-size: 0.75rem; opacity: 0.9; margin-bottom: 0.25rem;">You</div>
+                            <div style="font-size: 0.95rem; line-height: 1.5;">{msg["content"]}</div>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
 
-# --- Display Results ---
-if st.session_state.rag_result:
-    result = st.session_state.rag_result
+            elif msg["role"] == "assistant":
+                # Assistant message (left-aligned)
+                result = msg["content"]
 
-    # Handle error cases
-    if "error" in result:
-        st.error(f"❌ {result['error']}")
-    # Handle unmatched prompt case (query validation failed)
-    elif "message" in result:
-        st.warning(result["message"])
-        if "validation_reason" in result:
-            st.info(f"**Reason:** {result['validation_reason']}")
-        if "details" in result:
-            st.info(f"**Details:** {result['details']}")
-    # Handle successful response
-    elif "proposals" in result:
-        proposals = result["proposals"]
-
-        if not proposals:
-            st.warning("⚠️ No matching designs found. Please try a different prompt.")
-        else:
-            st.success(f"✅ Generated {len(proposals)} design proposals!")
-
-            # Display each proposal
-            for i, proposal in enumerate(proposals, 1):
-                with st.expander(
-                    f"🎨 Design Proposal {i}: {proposal['design_name']}",
-                    expanded=(i == 1),
-                ):
-                    st.markdown(f"**📝 Description:** {proposal['narrative_summary']}")
-                    st.markdown("---")
-
-                    # Show component IDs in colored cards
-                    cols = st.columns(3)
-                    with cols[0]:
-                        st.markdown(
-                            f"""
-                            <div class="metric-card">
-                                <h4 style="margin:0; font-size: 0.9rem;">Hero Section</h4>
-                                <p style="margin:0.5rem 0 0 0; font-size: 1.5rem; font-weight: bold;">{proposal["hero_id"]}</p>
+                # Handle different response types
+                if result.get("is_greeting", False):
+                    message_text = result["message"]
+                    st.markdown(f"""
+                        <div style="display: flex; justify-content: flex-start; margin-bottom: 1.5rem;">
+                            <div style="background: #e3f2fd; color: #1976d2; padding: 1rem 1.5rem;
+                                        border-radius: 1rem 1rem 1rem 0; max-width: 80%;
+                                        box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-left: 3px solid #2196f3;">
+                                <div style="font-size: 0.75rem; color: #1565c0; margin-bottom: 0.25rem;">AI Assistant</div>
+                                <div style="font-size: 0.95rem; line-height: 1.5; white-space: pre-wrap;">{message_text}</div>
                             </div>
-                        """,
-                            unsafe_allow_html=True,
-                        )
-                    with cols[1]:
-                        st.markdown(
-                            f"""
-                            <div class="metric-card">
-                                <h4 style="margin:0; font-size: 0.9rem;">Services Section</h4>
-                                <p style="margin:0.5rem 0 0 0; font-size: 1.5rem; font-weight: bold;">{proposal["services_id"]}</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+                elif result.get("is_dangerous", False):
+                    st.error(f"🚫 {result['error']}")
+
+                elif "error" in result:
+                    st.error(f"❌ {result['error']}")
+
+                elif "message" in result:
+                    st.warning(result["message"])
+
+                elif "proposals" in result:
+                    # Show assistant header
+                    num_proposals = len(result["proposals"])
+                    st.markdown(f"""
+                        <div style="display: flex; justify-content: flex-start; margin-bottom: 1rem;">
+                            <div style="background: #f0f4f8; color: #1f2937; padding: 1rem 1.5rem;
+                                        border-radius: 1rem 1rem 1rem 0; max-width: 80%;
+                                        box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-left: 3px solid #667eea;">
+                                <div style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem;">AI Assistant</div>
+                                <div style="font-size: 0.95rem; line-height: 1.5;">✅ Generated {num_proposals} design proposals</div>
                             </div>
-                        """,
-                            unsafe_allow_html=True,
-                        )
-                    with cols[2]:
-                        st.markdown(
-                            f"""
-                            <div class="metric-card">
-                                <h4 style="margin:0; font-size: 0.9rem;">Contact Section</h4>
-                                <p style="margin:0.5rem 0 0 0; font-size: 1.5rem; font-weight: bold;">{proposal["contact_id"]}</p>
-                            </div>
-                        """,
-                            unsafe_allow_html=True,
-                        )
+                        </div>
+                    """, unsafe_allow_html=True)
+
+                    # Display proposals in tabs
+                    proposals = result["proposals"]
+                    tab_labels = [f"🎨 {p['design_name']}" for p in proposals]
+                    tabs = st.tabs(tab_labels)
+
+                    for tab_idx, (tab, proposal) in enumerate(zip(tabs, proposals)):
+                        with tab:
+                            st.markdown(f"**📝 Description:** {proposal['narrative_summary']}")
+                            st.markdown("---")
+
+                            # Component IDs
+                            cols = st.columns(3)
+                            with cols[0]:
+                                st.markdown(f"""
+                                    <div class="metric-card">
+                                        <h4 style="margin:0; font-size: 0.9rem;">Hero</h4>
+                                        <p style="margin:0.5rem 0 0 0; font-size: 1.5rem; font-weight: bold;">{proposal["hero_id"]}</p>
+                                    </div>
+                                """, unsafe_allow_html=True)
+                            with cols[1]:
+                                st.markdown(f"""
+                                    <div class="metric-card">
+                                        <h4 style="margin:0; font-size: 0.9rem;">Services</h4>
+                                        <p style="margin:0.5rem 0 0 0; font-size: 1.5rem; font-weight: bold;">{proposal["services_id"]}</p>
+                                    </div>
+                                """, unsafe_allow_html=True)
+                            with cols[2]:
+                                st.markdown(f"""
+                                    <div class="metric-card">
+                                        <h4 style="margin:0; font-size: 0.9rem;">Contact</h4>
+                                        <p style="margin:0.5rem 0 0 0; font-size: 1.5rem; font-weight: bold;">{proposal["contact_id"]}</p>
+                                    </div>
+                                """, unsafe_allow_html=True)
+
+                            # HTML Preview
+                            if "full_html" in proposal and proposal["full_html"]:
+                                with st.expander("👁️ View Live Preview", expanded=False):
+                                    cleaned_html = proposal["full_html"].replace("\\n", "\n")
+                                    full_page = f"""
+                                    <!DOCTYPE html>
+                                    <html lang="en">
+                                    <head>
+                                        <meta charset="UTF-8">
+                                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                                        <script src="https://cdn.tailwindcss.com"></script>
+                                        <style>
+                                            body {{
+                                                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                                                margin: 0; padding: 1rem; background: #f9fafb;
+                                            }}
+                                            .container {{ max-width: 1200px; margin: 0 auto; }}
+                                        </style>
+                                    </head>
+                                    <body>
+                                        <div class="container">{cleaned_html}</div>
+                                    </body>
+                                    </html>
+                                    """
+                                    st.components.v1.html(full_page, height=600, scrolling=True)
 
                     st.markdown("<br>", unsafe_allow_html=True)
 
-                    # Show HTML preview if available
-                    if "full_html" in proposal and proposal["full_html"]:
-                        # Clean up the HTML by replacing literal \n with actual newlines
-                        cleaned_html = proposal["full_html"].replace("\\n", "\n")
+elif st.session_state.rag_result:
+    # Non-conversation mode - show single result
+    result = st.session_state.rag_result
 
-                        # Wrap in proper HTML document with Tailwind CDN
-                        full_page = f"""
-                        <!DOCTYPE html>
-                        <html lang="en">
-                        <head>
-                            <meta charset="UTF-8">
-                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                            <script src="https://cdn.tailwindcss.com"></script>
-                            <style>
-                                body {{
-                                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                                    margin: 0;
-                                    padding: 1rem;
-                                    background: #f9fafb;
-                                }}
-                                .container {{
-                                    max-width: 1200px;
-                                    margin: 0 auto;
-                                }}
-                            </style>
-                        </head>
-                        <body>
-                            <div class="container">
-                                {cleaned_html}
+    if result.get("is_greeting", False):
+        st.info(result["message"])
+    elif result.get("is_dangerous", False):
+        st.error(f"🚫 {result['error']}")
+    elif "error" in result:
+        st.error(f"❌ {result['error']}")
+    elif "message" in result:
+        st.warning(result["message"])
+    elif "proposals" in result:
+        proposals = result["proposals"]
+        if proposals:
+            st.success(f"✅ Generated {len(proposals)} design proposals!")
+
+            tab_labels = [f"🎨 {p['design_name']}" for p in proposals]
+            tabs = st.tabs(tab_labels)
+
+            for tab, proposal in zip(tabs, proposals):
+                with tab:
+                    st.markdown(f"**📝 Description:** {proposal['narrative_summary']}")
+                    st.markdown("---")
+
+                    cols = st.columns(3)
+                    with cols[0]:
+                        st.markdown(f"""
+                            <div class="metric-card">
+                                <h4 style="margin:0; font-size: 0.9rem;">Hero</h4>
+                                <p style="margin:0.5rem 0 0 0; font-size: 1.5rem; font-weight: bold;">{proposal["hero_id"]}</p>
                             </div>
-                        </body>
-                        </html>
-                        """
+                        """, unsafe_allow_html=True)
+                    with cols[1]:
+                        st.markdown(f"""
+                            <div class="metric-card">
+                                <h4 style="margin:0; font-size: 0.9rem;">Services</h4>
+                                <p style="margin:0.5rem 0 0 0; font-size: 1.5rem; font-weight: bold;">{proposal["services_id"]}</p>
+                            </div>
+                        """, unsafe_allow_html=True)
+                    with cols[2]:
+                        st.markdown(f"""
+                            <div class="metric-card">
+                                <h4 style="margin:0; font-size: 0.9rem;">Contact</h4>
+                                <p style="margin:0.5rem 0 0 0; font-size: 1.5rem; font-weight: bold;">{proposal["contact_id"]}</p>
+                            </div>
+                        """, unsafe_allow_html=True)
 
-                        st.markdown("### 👁️ Live Preview")
-                        st.components.v1.html(full_page, height=700, scrolling=True)
-                    else:
-                        st.warning("⚠️ No preview available for this design.")
-    else:
-        st.error("❌ Unexpected response format from the RAG pipeline.")
+                    if "full_html" in proposal and proposal["full_html"]:
+                        with st.expander("👁️ View Live Preview", expanded=True):
+                            cleaned_html = proposal["full_html"].replace("\\n", "\n")
+                            full_page = f"""
+                            <!DOCTYPE html>
+                            <html lang="en">
+                            <head>
+                                <meta charset="UTF-8">
+                                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                                <script src="https://cdn.tailwindcss.com"></script>
+                                <style>
+                                    body {{
+                                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                                        margin: 0; padding: 1rem; background: #f9fafb;
+                                    }}
+                                    .container {{ max-width: 1200px; margin: 0 auto; }}
+                                </style>
+                            </head>
+                            <body>
+                                <div class="container">{cleaned_html}</div>
+                            </body>
+                            </html>
+                            """
+                            st.components.v1.html(full_page, height=600, scrolling=True)
 
-# --- Display Prompt History ---
+# --- Input Section at Bottom (Fixed) ---
+st.markdown("---")
+st.markdown("### 💬 Ask a question")
+
+# Create a form to handle submission
+with st.form(key="chat_form", clear_on_submit=True):
+    col1, col2 = st.columns([5, 1])
+
+    with col1:
+        user_prompt = st.text_input(
+            "Your message:",
+            placeholder="e.g., Create a modern website for criminal defense attorney...",
+            key=f"user_input_{st.session_state.input_key}",
+            label_visibility="collapsed"
+        )
+
+    with col2:
+        submit_button = st.form_submit_button("Send 🚀", use_container_width=True)
+
+# Handle form submission
+if submit_button and user_prompt:
+    # Increment key to reset input
+    st.session_state.input_key += 1
+
+    # Store prompt
+    st.session_state.prompt_history.append(user_prompt)
+
+    # Add user message to chat history
+    if st.session_state.conversation_mode:
+        st.session_state.chat_history.append({
+            "role": "user",
+            "content": user_prompt
+        })
+
+    # Run pipeline
+    with st.spinner("🔍 Processing..."):
+        conversation_chain = st.session_state.conversation_chain if st.session_state.conversation_mode else None
+        st.session_state.rag_result = run_rag_pipeline(user_prompt, conversation_chain)
+
+    # Add assistant response to chat history
+    if st.session_state.conversation_mode and st.session_state.rag_result:
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "content": st.session_state.rag_result
+        })
+
+    # Rerun to show new messages
+    st.rerun()
+
+# --- Sidebar ---
 with st.sidebar:
-    st.markdown("### 📜 Recent Prompts")
-    st.markdown("---")
+    # Conversation stats
+    if st.session_state.conversation_mode and st.session_state.conversation_chain.has_previous_context():
+        st.markdown("### 💬 Stats")
+        stats = st.session_state.conversation_chain.get_stats()
+        st.markdown(f"""
+        - **Turns:** {stats['total_turns']}
+        - **Messages:** {stats['total_turns'] * 2}
+        """)
+        st.markdown("---")
 
+    # Recent prompts
+    st.markdown("### 📜 Recent")
     if st.session_state.prompt_history:
-        for i, prompt in enumerate(
-            reversed(st.session_state.prompt_history[-5:]), 1
-        ):  # Show only last 5
-            if prompt:  # Only display non-empty prompts
-                st.markdown(
-                    f"""
-                    <div style="background: white; padding: 0.75rem; border-radius: 0.5rem; 
+        for i, prompt in enumerate(reversed(st.session_state.prompt_history[-5:]), 1):
+            if prompt:
+                st.markdown(f"""
+                    <div style="background: white; padding: 0.75rem; border-radius: 0.5rem;
                                 margin-bottom: 0.75rem; border-left: 3px solid #667eea;">
-                        <small style="color: #6b7280;">Prompt {i}</small>
-                        <p style="margin: 0.25rem 0 0 0; color: #1f2937; font-size: 0.875rem;">{prompt[:100]}{"..." if len(prompt) > 100 else ""}</p>
+                        <small style="color: #6b7280;">#{i}</small>
+                        <p style="margin: 0.25rem 0 0 0; color: #1f2937; font-size: 0.875rem;">{prompt[:60]}{"..." if len(prompt) > 60 else ""}</p>
                     </div>
-                """,
-                    unsafe_allow_html=True,
-                )
+                """, unsafe_allow_html=True)
     else:
-        st.info("No prompts yet. Start by entering a query above!")
+        st.info("No prompts yet")
 
     st.markdown("---")
+
+    # How it works
     st.markdown("### ℹ️ How It Works")
     st.markdown("""
-    1. **Validate** - Checks if your query is law-firm related
-    2. **Match** - Finds relevant design components
-    3. **Generate** - Creates 3 unique proposals
-    4. **Preview** - Shows live HTML mockups
-    """)
-
-    st.markdown("---")
-    st.markdown("### 🎯 Best Results")
-    st.markdown("""
-    - Be specific about practice area
-    - Mention desired tone/style
-    - Include target audience
-    - Use clear, descriptive language
+    1. **Safety Check** - Filters harmful inputs
+    2. **Validate** - Law firm relevance
+    3. **AI Search** - Find best components
+    4. **Generate** - 3 unique proposals
+    5. **Preview** - Live HTML mockups
     """)

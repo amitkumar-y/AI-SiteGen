@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from data_loader import load_knowledge_base
 from retriever import ComponentRetriever
+from safety_filters import SafetyFilter
+from conversation_manager import ConversationChain
 
 # --- Initialization & Security ---
 load_dotenv()
@@ -22,6 +24,9 @@ if not GROQ_API_KEY:
 # Groq Client Initialization
 client = Groq()
 MODEL_NAME = "llama-3.1-8b-instant"
+
+# Safety Filter Initialization
+safety_filter = SafetyFilter()
 
 # --- Constants ---
 UNMATCHED_PROMPT_MESSAGE = "⚠️ This system is specialized for **Law Firm Website Design** only.\n\nYour request doesn't appear to be related to creating a law firm website. Please provide details about:\n\n✅ **Type of law practice** (e.g., criminal defense, estate planning, corporate law, family law)\n✅ **Design tone/style** (e.g., modern, traditional, aggressive, conservative)\n✅ **Target audience** (e.g., individuals, corporations, families)\n\n**Example prompts:**\n- 'Modern and aggressive site for criminal defense attorney'\n- 'Traditional and trustworthy site for estate planning firm'\n- 'Professional corporate law firm with clean design'"
@@ -296,18 +301,58 @@ Return ONLY valid JSON with this exact structure:
         return None
 
 
-def run_rag_pipeline(user_prompt: str) -> Dict[str, Any]:
+def run_rag_pipeline(
+    user_prompt: str, conversation_chain: Optional[ConversationChain] = None
+) -> Dict[str, Any]:
     """
     Runs the full RAG pipeline:
-    1. Validates the query is law-firm related
-    2. Loads the knowledge base
-    3. Retrieves relevant components
-    4. Generates design proposals
+    1. Pre-filters input for safety (dangerous patterns, greetings)
+    2. Checks for conversation context and follow-ups
+    3. Validates the query is law-firm related
+    4. Loads the knowledge base
+    5. Retrieves relevant components
+    6. Generates design proposals
+
+    Args:
+        user_prompt: User's input query
+        conversation_chain: Optional conversation chain for context
 
     Returns:
         Dict containing either the proposals or an error message
     """
     try:
+        # Handle conversation context if provided
+        enhanced_prompt = user_prompt
+        if conversation_chain:
+            # Build contextual query for follow-ups
+            enhanced_prompt = conversation_chain.build_contextual_query(user_prompt)
+
+            # Store user message in conversation
+            conversation_chain.add_message("user", user_prompt)
+
+        # Step 0: Safety filter check (pre-RAG filtering)
+        safety_check = safety_filter.validate_input(user_prompt)
+
+        # Handle greetings
+        if safety_check["is_greeting"]:
+            return {
+                "is_greeting": True,
+                "message": safety_check["message"]
+            }
+
+        # Block dangerous inputs
+        if safety_check["is_dangerous"]:
+            return {
+                "is_dangerous": True,
+                "error": safety_check["message"]
+            }
+
+        # If not safe to continue, stop here
+        if not safety_check["should_continue"]:
+            return {
+                "error": "Input validation failed. Please try a different request."
+            }
+
         # Step 1: Validate the query
         validation = validate_query(user_prompt)
 
@@ -328,9 +373,9 @@ def run_rag_pipeline(user_prompt: str) -> Dict[str, Any]:
                 "error": "Failed to load knowledge base. Please check the data file."
             }
 
-        # Step 3: Retrieve relevant components
+        # Step 3: Retrieve relevant components (use enhanced prompt for better context)
         retriever = ComponentRetriever(df)
-        components = retriever.get_relevant_components(user_prompt, top_n=6)
+        components = retriever.get_relevant_components(enhanced_prompt, top_n=6)
 
         if not components or len(components) < 3:
             return {
@@ -352,7 +397,19 @@ def run_rag_pipeline(user_prompt: str) -> Dict[str, Any]:
                 "error": "System generated fewer than 3 proposals. Please try again."
             }
 
-        return {"proposals": [p.dict() for p in result.proposals]}
+        # Store assistant response in conversation
+        proposals_list = [p.model_dump() for p in result.proposals]
+        if conversation_chain:
+            conversation_chain.add_message(
+                "assistant",
+                f"Generated {len(proposals_list)} design proposals",
+                metadata={"proposals": proposals_list}
+            )
+
+        return {
+            "proposals": proposals_list,
+            "is_follow_up": conversation_chain.detect_follow_up(user_prompt) if conversation_chain else False
+        }
 
     except Exception as e:
         print(f"Pipeline error: {str(e)}")

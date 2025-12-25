@@ -6,13 +6,16 @@ It handles all data ingestion tasks, including:
 - Loading the design components from a CSV file
 - Validating the file structure and required columns
 - Providing clean data to other parts of the application
+- Converting DataFrame to list of dictionaries for vector store
 
 Key Functions:
 - load_knowledge_base(): Loads and validates the component database
+- dataframe_to_components(): Converts DataFrame to component dictionaries
 """
 
 import pandas as pd
 import os
+from typing import List, Dict, Any
 
 
 def load_knowledge_base(filepath: str) -> pd.DataFrame:
@@ -50,3 +53,31 @@ def load_knowledge_base(filepath: str) -> pd.DataFrame:
     except Exception as e:
         print(f"Error loading knowledge base: {e}")
         raise
+
+
+def dataframe_to_components(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    """
+    Convert DataFrame to a list of component dictionaries.
+
+    This function transforms the DataFrame into a format suitable for
+    the vector store and retrieval system.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing design components
+
+    Returns:
+        List[Dict[str, Any]]: List of component dictionaries with standardized keys
+    """
+    components = []
+
+    for _, row in df.iterrows():
+        component = {
+            "id": row.get("ID", ""),
+            "feature": row.get("Feature", ""),
+            "keywords": row.get("Keywords", ""),
+            "tone": row.get("Tone", ""),
+            "html": row.get("HTML_Snippet", ""),
+        }
+        components.append(component)
+
+    return components

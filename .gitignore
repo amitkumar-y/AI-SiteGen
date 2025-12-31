@@ -12,6 +12,9 @@ npm-debug.log*
 # Streamlit
 .streamlit/
 
+# ChromaDB vector database
+chroma_db/
+
 # Logs
 logs/
 *.log
